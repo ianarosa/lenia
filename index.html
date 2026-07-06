@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>LENIA — a synthetic microbiome</title>
+<style>
+  :root{
+    --bg:#05070b;
+    --panel:#0b0f16;
+    --panel-2:#0e141d;
+    --line:#182231;
+    --line-2:#233145;
+    --ink:#c7d1e0;
+    --ink-dim:#6d7a8f;
+    --ink-faint:#465266;
+    --live:#38f0d0;
+    --live-2:#9dff7a;
+    --warm:#ffe6b0;
+    --sans:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","Cascadia Code","Consolas","Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #0c141f 0%, var(--bg) 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    min-height:100%;
+    padding:22px clamp(12px,3vw,40px) 46px;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* ---- masthead ---- */
+  header{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:18px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+    padding-bottom:14px;margin-bottom:20px;
+  }
+  .brand h1{
+    margin:0;font-weight:700;
+    font-size:clamp(28px,5vw,46px);
+    letter-spacing:.42em;
+    padding-left:.42em;
+    background:linear-gradient(92deg,#7fe9ff,#8dff9e 55%,#ffe6b0);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .brand .sub{
+    font-family:var(--mono);
+    font-size:11px;letter-spacing:.34em;text-transform:uppercase;
+    color:var(--ink-dim);margin-top:6px;padding-left:.2em;
+  }
+  .plate-id{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;
+    color:var(--ink-faint);text-align:right;line-height:1.9;text-transform:uppercase;
+  }
+  .plate-id b{color:var(--ink-dim);font-weight:600}
+
+  .lede{
+    font-family:var(--mono);font-size:12px;color:var(--ink-dim);
+    line-height:1.7;margin:0 0 20px;max-width:70ch;
+  }
+  .lede em{color:var(--live);font-style:normal}
+
+  /* ---- main layout ---- */
+  .lab{
+    display:grid;
+    grid-template-columns:1fr 268px;
+    gap:18px;align-items:start;
+  }
+  @media(max-width:860px){ .lab{grid-template-columns:1fr} }
+
+  /* ---- the dish / microscope viewport ---- */
+  .scope{
+    position:relative;
+    border:1px solid var(--line-2);
+    border-radius:14px;
+    background:#02040a;
+    overflow:hidden;
+    box-shadow:0 0 0 1px #05070b inset, 0 18px 60px -30px #000;
+    aspect-ratio:3/2;
+  }
+  .scope canvas{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:auto;touch-action:none;cursor:crosshair}
+  /* vignette + graticule overlay */
+  .scope .optics{
+    position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 100% at 50% 50%, transparent 52%, rgba(2,4,10,.55) 82%, rgba(2,4,10,.92) 100%);
+  }
+  .scope .optics::before,.scope .optics::after{
+    content:"";position:absolute;background:rgba(150,220,255,.10);
+  }
+  .scope .optics::before{left:50%;top:0;bottom:0;width:1px;transform:translateX(-.5px)}
+  .scope .optics::after{top:50%;left:0;right:0;height:1px;transform:translateY(-.5px)}
+  .scope .tag{
+    position:absolute;font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+    color:rgba(160,220,255,.45);text-transform:uppercase;pointer-events:none;user-select:none;
+  }
+  .scope .tag.tl{top:10px;left:12px}
+  .scope .tag.tr{top:10px;right:12px;color:rgba(157,255,122,.5)}
+  .scope .scalebar{
+    position:absolute;left:14px;bottom:12px;pointer-events:none;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:rgba(160,220,255,.5);
+  }
+  .scope .scalebar i{display:block;width:64px;height:0;border-top:2px solid rgba(160,220,255,.5);margin-bottom:4px}
+  .scope .paused-flag{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-family:var(--mono);font-size:12px;letter-spacing:.3em;color:var(--warm);
+    background:rgba(4,6,12,.7);border:1px solid var(--line-2);border-radius:6px;
+    padding:8px 16px;display:none;
+  }
+  .scope.paused .paused-flag{display:block}
+
+  /* ---- instrument panel ---- */
+  .panel{
+    border:1px solid var(--line);border-radius:12px;background:var(--panel);
+    padding:15px 15px 17px;
+  }
+  .panel h2{
+    margin:0 0 12px;font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--ink-dim);font-weight:600;
+    display:flex;align-items:center;gap:8px;
+  }
+  .panel h2::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live)}
+
+  .readout{font-family:var(--mono);font-size:12px;line-height:1.05}
+  .readout .row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .readout .row:last-child{border-bottom:0}
+  .readout .k{color:var(--ink-faint);letter-spacing:.12em;text-transform:uppercase;font-size:10px}
+  .readout .v{color:var(--live);font-size:13.5px;font-variant-numeric:tabular-nums}
+  .readout .v small{color:var(--ink-dim);font-size:10px}
+
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+  button.ctl{
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+    color:var(--ink);background:var(--panel-2);border:1px solid var(--line-2);
+    border-radius:7px;padding:9px 6px;cursor:pointer;text-transform:uppercase;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  button.ctl:hover{border-color:var(--live);color:var(--live)}
+  button.ctl.wide{grid-column:1/-1}
+  button.ctl.on{background:rgba(56,240,208,.12);border-color:var(--live);color:var(--live)}
+  button.ctl.primary{color:#04120f;background:linear-gradient(92deg,#38f0d0,#9dff7a);border-color:transparent;font-weight:600}
+
+  .slider{margin-top:14px}
+  .slider label{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);display:flex;justify-content:space-between}
+  .slider input{width:100%;margin-top:8px;accent-color:var(--live)}
+
+  /* ---- culture tray ---- */
+  .tray{margin-top:20px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:15px 16px 18px}
+  .tray-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .tray-head h2{margin:0;font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-dim);font-weight:600}
+  .tray-head .hint{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);letter-spacing:.04em}
+  .tray-head .hint b{color:var(--live-2)}
+
+  .slides{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  @media(max-width:760px){.slides{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:440px){.slides{grid-template-columns:repeat(2,1fr)}}
+  .slide{
+    border:1px solid var(--line-2);border-radius:9px;overflow:hidden;background:#02040a;
+    cursor:pointer;position:relative;transition:border-color .15s,transform .12s,box-shadow .15s;
+  }
+  .slide:hover{border-color:var(--live);transform:translateY(-2px)}
+  .slide.parent{border-color:var(--warm)}
+  .slide .dishwrap{position:relative;aspect-ratio:1/1;background:#02040a}
+  .slide canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .slide .dishwrap::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(110% 110% at 50% 50%,transparent 55%,rgba(2,4,10,.85) 100%)}
+  .slide .meta{padding:6px 8px 7px;border-top:1px solid var(--line);background:var(--panel-2)}
+  .slide .name{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-dim);display:flex;justify-content:space-between;align-items:center}
+  .slide.parent .name{color:var(--warm)}
+  .slide .name .badge{font-size:8px;color:var(--warm)}
+  .slide .fit{font-family:var(--mono);font-size:9px;color:var(--ink-faint);margin-top:3px;font-variant-numeric:tabular-nums}
+  .slide .fit b{color:var(--live)}
+
+  footer{margin-top:26px;border-top:1px solid var(--line);padding-top:14px;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);letter-spacing:.06em;line-height:1.8}
+  footer b{color:var(--ink-dim);font-weight:600}
+  a{color:var(--ink-dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>LENIA</h1>
+      <div class="sub">a synthetic microbiome · continuous cellular automata</div>
+    </div>
+    <div class="plate-id">
+      <div><b>CULTURE PLATE</b> LN-01</div>
+      <div>MEDIUM: continuous · toroidal</div>
+      <div id="stamp">GEN 000 · —</div>
+    </div>
+  </header>
+
+  <p class="lede">
+    Life here is not drawn — it is <em>grown</em>. A smooth field diffuses under a single genome
+    (kernel μ, growth σ, radius R, metabolism T); certain settings spontaneously condense into
+    self-propelling <em>creatures</em>. Cultivate a lineage: pick the specimen you find most alive
+    and it breeds the next generation — or let <em>auto-evolve</em> select for you.
+  </p>
+
+  <div class="lab">
+    <div class="scope" id="scope">
+      <canvas id="stage"></canvas>
+      <div class="optics"></div>
+      <div class="tag tl">FIELD ×1 · LN-01</div>
+      <div class="tag tr" id="livetag">● LIVE</div>
+      <div class="scalebar"><i></i>1 kernel-Ø</div>
+      <div class="paused-flag">◼ PAUSED</div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Champion genome</h2>
+        <div class="readout">
+          <div class="row"><span class="k">Growth μ</span><span class="v" id="r-mu">—</span></div>
+          <div class="row"><span class="k">Growth σ</span><span class="v" id="r-sigma">—</span></div>
+          <div class="row"><span class="k">Kernel R</span><span class="v" id="r-R">—</span></div>
+          <div class="row"><span class="k">Metab. T</span><span class="v" id="r-T">—</span></div>
+          <div class="row"><span class="k">Biomass</span><span class="v" id="r-mass">—</span></div>
+          <div class="row"><span class="k">Drift</span><span class="v" id="r-drift">—</span></div>
+        </div>
+        <div class="btns">
+          <button class="ctl" id="b-play">❚❚ Pause</button>
+          <button class="ctl" id="b-reseed">↻ Reseed</button>
+          <button class="ctl" id="b-orbium">◉ Orbium</button>
+          <button class="ctl" id="b-random">✦ Random</button>
+          <button class="ctl wide" id="b-auto">⧗ Auto-evolve : OFF</button>
+        </div>
+        <div class="slider">
+          <label>Simulation speed <span id="spd-val">2×</span></label>
+          <input type="range" id="spd" min="1" max="6" step="1" value="2">
+        </div>
+        <div class="slider">
+          <label>Mutation strength <span id="mut-val">1.0×</span></label>
+          <input type="range" id="mut" min="20" max="220" step="5" value="100">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tray">
+    <div class="tray-head">
+      <h2>Culture tray · candidate specimens</h2>
+      <div class="hint">click a slide to <b>select it as parent</b> — its mutations fill the next tray</div>
+    </div>
+    <div class="slides" id="slides"></div>
+  </div>
+
+  <footer>
+    <b>LENIA</b> — Lenia continuous CA (Chan, 2019). Drag on the field to seed living matter.
+    Everything runs client-side in one file — no server, no network. · <span id="fpsfoot">—</span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+(function(){
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+let _g2=null;
+function gauss(){ // standard normal (Box-Muller, cached)
+  if(_g2!==null){const g=_g2;_g2=null;return g;}
+  let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  const m=Math.sqrt(-2*Math.log(u)); _g2=m*Math.sin(2*Math.PI*v); return m*Math.cos(2*Math.PI*v);
+}
+
+/* ---------- colour: bioluminescent fluorescence gradient ---------- */
+const STOPS=[
+  [0.00, 6, 8, 20],
+  [0.14, 18, 22, 66],
+  [0.32, 14, 78, 120],
+  [0.52, 30, 196, 200],
+  [0.74, 150, 244, 128],
+  [1.00, 232, 255, 205],
+];
+function gradAt(t){
+  t=clamp(t,0,1);
+  for(let i=1;i<STOPS.length;i++){
+    if(t<=STOPS[i][0]){
+      const a=STOPS[i-1],b=STOPS[i];
+      const f=(t-a[0])/(b[0]-a[0]||1);
+      return [a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f, a[3]+(b[3]-a[3])*f];
+    }
+  }
+  const l=STOPS[STOPS.length-1]; return [l[1],l[2],l[3]];
+}
+// hue-rotate an rgb triple (approx, luma-preserving)
+function hueRot(r,g,b,a){
+  const c=Math.cos(a),s=Math.sin(a);
+  const m=[
+    0.213+c*0.787-s*0.213, 0.715-c*0.715-s*0.715, 0.072-c*0.072+s*0.928,
+    0.213-c*0.213+s*0.143, 0.715+c*0.285+s*0.140, 0.072-c*0.072-s*0.283,
+    0.213-c*0.213-s*0.787, 0.715-c*0.715+s*0.715, 0.072+c*0.928+s*0.072
+  ];
+  return [
+    clamp(r*m[0]+g*m[1]+b*m[2],0,255),
+    clamp(r*m[3]+g*m[4]+b*m[5],0,255),
+    clamp(r*m[6]+g*m[7]+b*m[8],0,255)
+  ];
+}
+function buildLUT(hue){
+  const lut=new Uint8ClampedArray(256*3);
+  for(let i=0;i<256;i++){
+    let [r,g,b]=gradAt(i/255);
+    if(hue) [r,g,b]=hueRot(r,g,b,hue);
+    lut[i*3]=r;lut[i*3+1]=g;lut[i*3+2]=b;
+  }
+  return lut;
+}
+
+/* ---------- kernel core (concentric-shell radial bump) ---------- */
+function kcore(r,beta,kw){
+  const n=beta.length, t=r*n, i=Math.floor(t);
+  if(i>=n) return 0;
+  const fr=t-i-0.5;
+  return beta[i]*Math.exp(-(fr*fr)/(2*kw*kw));
+}
+
+/* ---------- genome ---------- */
+// Default is a blob-robust regime that reliably condenses into living, drifting cells.
+const DEFAULT={ mu:0.15, sigma:0.026, R:13, T:10, kw:0.15, beta:[1], hue:0.0 };
+// Classic Orbium glider genome.
+const ORBIUM ={ mu:0.15, sigma:0.017, R:13, T:10, kw:0.15, beta:[1], hue:0.42 };
+function randomGenome(){
+  const nb=Math.random()<0.35?2:1;
+  const beta=[]; for(let i=0;i<nb;i++) beta.push(i===0?1:rnd(0.3,1));
+  return {
+    mu:rnd(0.10,0.22), sigma:rnd(0.013,0.038),
+    R:Math.round(rnd(9,15)), T:rnd(7,13),
+    kw:rnd(0.09,0.20), beta, hue:rnd(-1.2,1.2)
+  };
+}
+function mutate(g,k){
+  const beta=g.beta.slice();
+  for(let i=0;i<beta.length;i++) beta[i]=clamp(beta[i]+gauss()*0.10*k,0.15,1);
+  return {
+    mu:clamp(g.mu+gauss()*0.010*k,0.08,0.24),
+    sigma:clamp(g.sigma*(1+gauss()*0.14*k),0.010,0.05),
+    R:clamp(Math.round(g.R+gauss()*1.4*k),8,16),
+    T:clamp(g.T+gauss()*1.3*k,5,16),
+    kw:clamp(g.kw+gauss()*0.02*k,0.07,0.24),
+    beta,
+    hue:g.hue+gauss()*0.28*k
+  };
+}
+
+/* ---------- Lenia engine ---------- */
+class Lenia{
+  constructor(W,H,g,maxR){
+    this.W=W;this.H=H;this.maxR=maxR||99;
+    this.A=new Float32Array(W*H);
+    this.B=new Float32Array(W*H);
+    this.oc=document.createElement("canvas");this.oc.width=W;this.oc.height=H;
+    this.octx=this.oc.getContext("2d");
+    this.img=this.octx.createImageData(W,H);
+    this.setGenome(g);
+  }
+  setGenome(g){
+    this.g={...g,beta:g.beta.slice()};
+    // clamp R so the kernel fits within the grid (and the perf budget for minis)
+    this.g.R=Math.min(this.g.R, this.maxR, Math.floor(Math.min(this.W,this.H)/2)-1);
+    this.buildKernel();
+    this.lut=buildLUT(this.g.hue);
+  }
+  buildKernel(){
+    const R=this.g.R,kw=this.g.kw,beta=this.g.beta;
+    const Ri=Math.ceil(R);this.pad=Ri;
+    // padded (wrapped) buffer -> branchless inner loop with flat tap offsets
+    const pW=this.W+2*Ri,pH=this.H+2*Ri;
+    this.pW=pW;this.pH=pH;this.P=new Float32Array(pW*pH);
+    const toff=[],ww=[];let sum=0;
+    for(let dy=-Ri;dy<=Ri;dy++)for(let dx=-Ri;dx<=Ri;dx++){
+      const d=Math.sqrt(dx*dx+dy*dy);
+      if(d>R) continue;
+      const w=kcore(d/R,beta,kw);
+      if(w>1e-4){toff.push(dy*pW+dx);ww.push(w);sum+=w;}
+    }
+    const n=ww.length;
+    this.toff=new Int32Array(toff);
+    this.w=new Float32Array(n);for(let i=0;i<n;i++)this.w[i]=ww[i]/sum;
+    this.nt=n;
+  }
+  fillPad(){ // copy A into padded P with toroidal wrap
+    const W=this.W,H=this.H,R=this.pad,pW=this.pW,pH=this.pH,A=this.A,P=this.P;
+    for(let py=0;py<pH;py++){
+      let sy=py-R; sy=((sy%H)+H)%H; const sb=sy*W,pb=py*pW;
+      for(let px=0;px<pW;px++){
+        let sx=px-R; sx=((sx%W)+W)%W;
+        P[pb+px]=A[sb+sx];
+      }
+    }
+  }
+  step(){
+    this.fillPad();
+    const W=this.W,H=this.H,R=this.pad,pW=this.pW,A=this.A,B=this.B,P=this.P,toff=this.toff,w=this.w,nt=this.nt;
+    const mu=this.g.mu,invT=1/this.g.T,s2=2*this.g.sigma*this.g.sigma;
+    for(let y=0;y<H;y++){
+      const yb=y*W, cRow=(y+R)*pW+R;
+      for(let x=0;x<W;x++){
+        const c=cRow+x; let u=0;
+        for(let k=0;k<nt;k++) u+=w[k]*P[c+toff[k]];
+        const d=u-mu;
+        let v=A[yb+x]+invT*(2*Math.exp(-(d*d)/s2)-1);
+        B[yb+x]=v<0?0:v>1?1:v;
+      }
+    }
+    this.A=B;this.B=A;
+  }
+  addBlob(bx,by,rad,amp){
+    const W=this.W,H=this.H,A=this.A,ri=Math.ceil(rad),s2=2*(rad*0.5)*(rad*0.5),r2=rad*rad;
+    const bxi=Math.round(bx),byi=Math.round(by);
+    for(let dy=-ri;dy<=ri;dy++)for(let dx=-ri;dx<=ri;dx++){
+      const d2=dx*dx+dy*dy; if(d2>r2)continue;
+      let x=bxi+dx,y=byi+dy; x=((x%W)+W)%W; y=((y%H)+H)%H;
+      const v=amp*Math.exp(-d2/s2)*(0.65+0.7*Math.random());
+      const i=y*W+x; A[i]=A[i]+v>1?1:A[i]+v;
+    }
+  }
+  seed(){
+    this.A.fill(0);
+    const cx=this.W*0.5,cy=this.H*0.5,R=this.g.R;
+    // medium-density core (too sparse fizzles, too dense over-saturates & collapses)
+    this.addBlob(cx,cy,R*0.95,0.85);
+    // one offset satellite for asymmetry -> the colony drifts/develops a direction
+    this.addBlob(cx+R*(0.8+Math.random()*0.8),cy+R*(Math.random()-0.5),R*0.6,0.7);
+    if(Math.random()<0.5)
+      this.addBlob(cx-R*(0.7+Math.random()*0.7),cy+R*(Math.random()-0.5)*1.4,R*0.55,0.65);
+  }
+  seedOrbium(){
+    // compact energetic patch — under a glider genome this tends to shear into a traveller
+    this.A.fill(0);
+    const R=this.g.R;
+    this.addBlob(this.W*0.42,this.H*0.5,R*0.95,1.0);
+    this.addBlob(this.W*0.52,this.H*0.44,R*0.55,0.9);
+  }
+  stats(){
+    const W=this.W,H=this.H,A=this.A;let mass=0,sx=0,sy=0,live=0;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const v=A[y*W+x]; if(v>0.03){mass+=v;sx+=v*x;sy+=v*y;} if(v>0.12)live++;
+    }
+    return {mass, cx:mass?sx/mass:W/2, cy:mass?sy/mass:H/2, frac:live/(W*H)};
+  }
+  render(){
+    const A=this.A,d=this.img.data,lut=this.lut,n=A.length;
+    for(let i=0;i<n;i++){
+      let v=A[i]; v=v<0?0:v>1?1:v;
+      const p=((v*255)|0)*3,o=i*4;
+      d[o]=lut[p];d[o+1]=lut[p+1];d[o+2]=lut[p+2];d[o+3]=255;
+    }
+    this.octx.putImageData(this.img,0,0);
+  }
+}
+
+/* ---------- app state ---------- */
+const MAINW=180,MAINH=120,MINW=52,MINH=52,NCAND=6;
+const AUTO_PERIOD=260; // frames per auto generation
+let playing=true, speed=2, mutK=1.0, auto=false, gen=0, genTimer=0;
+let seqA=1; // specimen id counter
+
+const stageC=document.getElementById("stage");
+const sctx=stageC.getContext("2d");
+let main=new Lenia(MAINW,MAINH,DEFAULT);
+main.seed();
+
+// candidate slides
+const slidesEl=document.getElementById("slides");
+let cands=[]; // {sim, el, canvas, ctx, fitMass, fitDrift, lastcx, lastcy, name, isParent}
+
+function specName(){ const L="ABCDEFGH"[(seqA)%8]; const num=String(seqA*7%1000).padStart(3,"0"); seqA++; return "SP-"+L+num; }
+
+function makeSlide(g,isParent){
+  const sim=new Lenia(MINW,MINH,g,9);
+  if(isParent) sim.seed(); else sim.seed();
+  const el=document.createElement("div");
+  el.className="slide"+(isParent?" parent":"");
+  el.innerHTML=`<div class="dishwrap"><canvas width="${MINW}" height="${MINH}"></canvas></div>`+
+    `<div class="meta"><div class="name"><span class="nm"></span>`+
+    `<span class="badge">${isParent?"◆ PARENT":""}</span></div>`+
+    `<div class="fit">μ<b class="fm">—</b> · fit <b class="ff">—</b></div></div>`;
+  const canvas=el.querySelector("canvas");
+  const ctx=canvas.getContext("2d");
+  const c={sim,el,canvas,ctx,fit:0,drift:0,lastcx:MINW/2,lastcy:MINH/2,name:specName(),isParent};
+  el.querySelector(".nm").textContent=c.name;
+  el.querySelector(".fm").textContent=g.mu.toFixed(3);
+  el.addEventListener("click",()=>promote(c.sim.g,true));
+  return c;
+}
+
+function rebuildTray(parentG){
+  slidesEl.innerHTML="";
+  cands=[];
+  for(let i=0;i<NCAND;i++){
+    const g= i===0 ? {...parentG,beta:parentG.beta.slice()} : mutate(parentG,mutK);
+    const c=makeSlide(g,i===0);
+    cands.push(c); slidesEl.appendChild(c.el);
+  }
+  genTimer=0;
+}
+
+let guardFrames=0, reseedGuard=0; // watchdog: rescue a dish that dies during ignition
+function promote(g,reseedMain){
+  gen++;
+  main.setGenome(g);
+  if(reseedMain!==false) main.seed();
+  guardFrames=0; reseedGuard=0;
+  rebuildTray(g);
+  syncReadout();
+}
+
+/* ---------- rendering to display canvases ---------- */
+function fit(canvas){
+  const r=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);
+  const w=Math.round(r.width*dpr),h=Math.round(r.height*dpr);
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+}
+function blit(ctx,sim){
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(sim.oc,0,0,ctx.canvas.width,ctx.canvas.height);
+}
+
+/* ---------- readouts ---------- */
+const el=id=>document.getElementById(id);
+let lastMain={mass:0,cx:MAINW/2,cy:MAINH/2};
+function syncReadout(){
+  const g=main.g;
+  el("r-mu").textContent=g.mu.toFixed(3);
+  el("r-sigma").textContent=g.sigma.toFixed(3);
+  el("r-R").innerHTML=g.R+' <small>px</small>';
+  el("r-T").textContent=g.T.toFixed(1);
+}
+
+/* ---------- interaction: paint life ---------- */
+let painting=false;
+function stagePaint(e){
+  const r=stageC.getBoundingClientRect();
+  const x=(e.clientX-r.left)/r.width*MAINW;
+  const y=(e.clientY-r.top)/r.height*MAINH;
+  main.addBlob(x,y,main.g.R*0.7,0.9);
+}
+stageC.addEventListener("pointerdown",e=>{painting=true;stageC.setPointerCapture(e.pointerId);stagePaint(e);});
+stageC.addEventListener("pointermove",e=>{if(painting)stagePaint(e);});
+stageC.addEventListener("pointerup",()=>painting=false);
+stageC.addEventListener("pointercancel",()=>painting=false);
+
+/* ---------- controls ---------- */
+el("b-play").addEventListener("click",()=>{playing=!playing;el("b-play").textContent=playing?"❚❚ Pause":"▶ Play";document.getElementById("scope").classList.toggle("paused",!playing);});
+el("b-reseed").addEventListener("click",()=>{main.seed();cands.forEach(c=>c.sim.seed());});
+el("b-orbium").addEventListener("click",()=>{main.setGenome(ORBIUM);main.seedOrbium();rebuildTray(ORBIUM);gen++;syncReadout();});
+el("b-random").addEventListener("click",()=>promote(randomGenome(),true));
+el("b-auto").addEventListener("click",()=>{auto=!auto;const b=el("b-auto");b.textContent="⧗ Auto-evolve : "+(auto?"ON":"OFF");b.classList.toggle("on",auto);genTimer=0;});
+el("spd").addEventListener("input",e=>{speed=+e.target.value;el("spd-val").textContent=speed+"×";});
+el("mut").addEventListener("input",e=>{mutK=+e.target.value/100;el("mut-val").textContent=mutK.toFixed(1)+"×";});
+
+/* ---------- auto-evolve selection ---------- */
+function autoEvaluate(){
+  // pick best by accumulated fitness
+  let best=cands[0],bestScore=-1e9;
+  for(const c of cands){
+    const s=c.sim.stats();
+    // healthy biomass band + drift; punish death & explosion
+    const alive = s.frac>0.005 && s.frac<0.30 ? 1 : 0;
+    const bandPenalty = s.frac>0.30 ? (s.frac-0.30)*8 : 0;
+    const score = alive*(c.drift*1.6 + Math.min(s.mass,900)*0.004) - bandPenalty - (s.frac<0.004?5:0);
+    c.score=score;
+    if(score>bestScore){bestScore=score;best=c;}
+  }
+  promote(best.sim.g,true);
+}
+
+/* ---------- main loop ---------- */
+let fps=0,frames=0,fpsT=performance.now(),frameParity=0;
+function loop(now){
+  fit(stageC);
+  if(playing){
+    for(let s=0;s<speed;s++) main.step();
+    // minis step every other frame (thumbnails stay readable, big perf saving)
+    frameParity^=1;
+    if(frameParity){
+      for(const c of cands){
+        c.sim.step();
+        const st=c.sim.stats();
+        let dx=st.cx-c.lastcx, dy=st.cy-c.lastcy;
+        if(Math.abs(dx)>MINW/2||Math.abs(dy)>MINH/2){dx=0;dy=0;} // ignore wrap jumps
+        c.drift+=Math.sqrt(dx*dx+dy*dy);
+        c.lastcx=st.cx;c.lastcy=st.cy;
+        c._st=st;
+      }
+    }
+    if(auto){genTimer++; if(genTimer>=AUTO_PERIOD) autoEvaluate();}
+  }
+  // render
+  main.render(); blit(sctx,main);
+  for(const c of cands){
+    c.sim.render(); fit(c.canvas); blit(c.ctx,c.sim);
+  }
+  // live readouts
+  const st=main.stats();
+  // watchdog: if the field dies during the ignition window, reseed (bounded attempts)
+  if(playing){ guardFrames++;
+    if(st.mass<2 && guardFrames>25 && guardFrames<520 && reseedGuard<4){
+      main.seed(); reseedGuard++; guardFrames=0;
+    }
+  }
+  el("r-mass").textContent=Math.round(st.mass);
+  let ddx=st.cx-lastMain.cx,ddy=st.cy-lastMain.cy;
+  if(Math.abs(ddx)>MAINW/2||Math.abs(ddy)>MAINH/2){ddx=0;ddy=0;}
+  el("r-drift").innerHTML=(Math.sqrt(ddx*ddx+ddy*ddy)).toFixed(2)+' <small>px/f</small>';
+  lastMain=st;
+  const dead=st.frac<0.004;
+  el("livetag").textContent=dead?"○ DORMANT":"● LIVE";
+  el("livetag").style.color=dead?"rgba(255,180,120,.6)":"rgba(157,255,122,.7)";
+  for(const c of cands){
+    if(c._st){c.el.querySelector(".ff").textContent=(c.drift).toFixed(1);}
+  }
+  el("stamp").textContent="GEN "+String(gen).padStart(3,"0")+" · "+(auto?"AUTO":"MANUAL");
+
+  frames++;
+  if(now-fpsT>500){fps=Math.round(frames*1000/(now-fpsT));frames=0;fpsT=now;
+    el("fpsfoot").textContent=fps+" fps";}
+  requestAnimationFrame(loop);
+}
+
+// boot
+syncReadout();
+rebuildTray(main.g);
+try{window.__main=main;window.__seed=()=>main.seed();}catch(e){}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
