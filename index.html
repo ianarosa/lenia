@@ -165,6 +165,8 @@
   }
   .slide:hover{border-color:var(--live);transform:translateY(-2px)}
   .slide.parent{border-color:var(--warm)}
+  .slide.picked{border-color:var(--live);box-shadow:0 0 0 2px var(--live),0 0 26px rgba(56,240,208,.55);transform:translateY(-3px) scale(1.04);z-index:2}
+  .slide.picked .name{color:var(--live)}
   .slide .dishwrap{position:relative;aspect-ratio:1/1;background:#02040a}
   .slide canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   .slide .dishwrap::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(110% 110% at 50% 50%,transparent 55%,rgba(2,4,10,.85) 100%)}
@@ -268,13 +270,14 @@ function gauss(){ // standard normal (Box-Muller, cached)
 }
 
 /* ---------- colour: bioluminescent fluorescence gradient ---------- */
+// softer, lower-contrast aurora palette — lifted floor so hollows read as calm
+// mid-tones (not stark black holes), gentle green top instead of harsh chartreuse
 const STOPS=[
-  [0.00, 6, 8, 20],
-  [0.14, 18, 22, 66],
-  [0.32, 14, 78, 120],
-  [0.52, 30, 196, 200],
-  [0.74, 150, 244, 128],
-  [1.00, 232, 255, 205],
+  [0.00, 12, 20, 34],
+  [0.26, 24, 58, 86],
+  [0.50, 38, 122, 132],
+  [0.72, 96, 190, 168],
+  [1.00, 214, 246, 222],
 ];
 function gradAt(t){
   t=clamp(t,0,1);
@@ -320,30 +323,28 @@ function kcore(r,beta,kw){
 }
 
 /* ---------- genome ---------- */
-// Default is a blob-robust regime that reliably condenses into living, drifting cells.
-const DEFAULT={ mu:0.15, sigma:0.026, R:13, T:10, kw:0.15, beta:[1], hue:0.0 };
+// Default: a robust, constantly-MORPHING regime (creatures wobble & reshape, never freeze) that
+// stays relatively sparse. Auto-evolve turns the generation over before the dish crowds up.
+const DEFAULT={ mu:0.17, sigma:0.026, R:13, T:10, kw:0.15, beta:[1], hue:0.0 };
 // Classic Orbium glider genome.
 const ORBIUM ={ mu:0.15, sigma:0.017, R:13, T:10, kw:0.15, beta:[1], hue:0.42 };
+// genomes are kept inside a tested-VIABLE band so any tray pick survives on the big dish
 function randomGenome(){
-  const nb=Math.random()<0.35?2:1;
-  const beta=[]; for(let i=0;i<nb;i++) beta.push(i===0?1:rnd(0.3,1));
   return {
-    mu:rnd(0.10,0.22), sigma:rnd(0.013,0.038),
-    R:Math.round(rnd(9,15)), T:rnd(7,13),
-    kw:rnd(0.09,0.20), beta, hue:rnd(-1.2,1.2)
+    mu:rnd(0.15,0.19), sigma:rnd(0.023,0.030),
+    R:Math.round(rnd(12,15)), T:rnd(9,11),
+    kw:rnd(0.12,0.18), beta:[1], hue:rnd(-2,2)
   };
 }
 function mutate(g,k){
-  const beta=g.beta.slice();
-  for(let i=0;i<beta.length;i++) beta[i]=clamp(beta[i]+gauss()*0.10*k,0.15,1);
   return {
-    mu:clamp(g.mu+gauss()*0.010*k,0.08,0.24),
-    sigma:clamp(g.sigma*(1+gauss()*0.14*k),0.010,0.05),
-    R:clamp(Math.round(g.R+gauss()*1.4*k),8,16),
-    T:clamp(g.T+gauss()*1.3*k,5,16),
-    kw:clamp(g.kw+gauss()*0.02*k,0.07,0.24),
-    beta,
-    hue:g.hue+gauss()*0.28*k
+    mu:clamp(g.mu+gauss()*0.010*k,0.145,0.195),
+    sigma:clamp(g.sigma*(1+gauss()*0.10*k),0.022,0.031),
+    R:clamp(Math.round(g.R+gauss()*1.0*k),12,15),
+    T:clamp(g.T+gauss()*1.0*k,8,12),
+    kw:clamp(g.kw+gauss()*0.015*k,0.11,0.19),
+    beta:g.beta.slice(),
+    hue:g.hue+gauss()*0.6*k+0.3 // strong hue drift -> lineage visibly changes colour
   };
 }
 
@@ -422,12 +423,11 @@ class Lenia{
   seed(){
     this.A.fill(0);
     const cx=this.W*0.5,cy=this.H*0.5,R=this.g.R;
-    // medium-density core (too sparse fizzles, too dense over-saturates & collapses)
-    this.addBlob(cx,cy,R*0.95,0.85);
-    // one offset satellite for asymmetry -> the colony drifts/develops a direction
-    this.addBlob(cx+R*(0.8+Math.random()*0.8),cy+R*(Math.random()-0.5),R*0.6,0.7);
+    // strong central core (reliable ignition) + asymmetric satellites so it reshapes unevenly
+    this.addBlob(cx,cy,R*1.0,0.92);
+    this.addBlob(cx+R*(0.6+Math.random()*0.5),cy-R*(0.2+0.4*Math.random()),R*0.55,0.72);
     if(Math.random()<0.5)
-      this.addBlob(cx-R*(0.7+Math.random()*0.7),cy+R*(Math.random()-0.5)*1.4,R*0.55,0.65);
+      this.addBlob(cx-R*(0.6+Math.random()*0.5),cy+R*(Math.random()-0.3)*1.3,R*0.5,0.66);
   }
   seedOrbium(){
     // compact energetic patch — under a glider genome this tends to shear into a traveller
@@ -456,8 +456,10 @@ class Lenia{
 
 /* ---------- app state ---------- */
 const MAINW=180,MAINH=120,MINW=52,MINH=52,NCAND=6;
-const AUTO_PERIOD=260; // frames per auto generation
-let playing=true, speed=2, mutK=1.0, auto=false, gen=0, genTimer=0;
+const AUTO_PERIOD=420; // frames between auto-evolve selections (~7s at 60fps)
+const MASS_CAP=1900;   // upper carrying capacity — density held below this (calm, sparse, non-phobic)
+const MASS_FLOOR=850;  // lower floor — re-vigor with fresh life so it never dwindles to a speck
+let playing=true, speed=2, mutK=1.0, auto=true, gen=0, genTimer=0, stagnFrames=0;
 let seqA=1; // specimen id counter
 
 const stageC=document.getElementById("stage");
@@ -482,10 +484,12 @@ function makeSlide(g,isParent){
     `<div class="fit">μ<b class="fm">—</b> · fit <b class="ff">—</b></div></div>`;
   const canvas=el.querySelector("canvas");
   const ctx=canvas.getContext("2d");
-  const c={sim,el,canvas,ctx,fit:0,drift:0,lastcx:MINW/2,lastcy:MINH/2,name:specName(),isParent};
+  // keep the INTENDED genome (main-scale R) — the mini clamps R down to fit its tiny grid, so
+  // promoting c.sim.g would push a fragile small-R genome onto the big dish and kill it.
+  const c={sim,genome:{...g,beta:g.beta.slice()},el,canvas,ctx,fit:0,drift:0,lastcx:MINW/2,lastcy:MINH/2,name:specName(),isParent};
   el.querySelector(".nm").textContent=c.name;
   el.querySelector(".fm").textContent=g.mu.toFixed(3);
-  el.addEventListener("click",()=>promote(c.sim.g,true));
+  el.addEventListener("click",()=>promote(c.genome,true));
   return c;
 }
 
@@ -505,7 +509,7 @@ function promote(g,reseedMain){
   gen++;
   main.setGenome(g);
   if(reseedMain!==false) main.seed();
-  guardFrames=0; reseedGuard=0;
+  guardFrames=0; reseedGuard=0; stagnFrames=0;
   rebuildTray(g);
   syncReadout();
 }
@@ -519,6 +523,19 @@ function fit(canvas){
 function blit(ctx,sim){
   ctx.imageSmoothingEnabled=true;
   ctx.drawImage(sim.oc,0,0,ctx.canvas.width,ctx.canvas.height);
+}
+function blitGlow(ctx,sim){
+  const w=ctx.canvas.width,h=ctx.canvas.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.imageSmoothingEnabled=true;
+  // CRISP base — the smooth upscale already softens the pixels; keep the creatures defined.
+  ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;ctx.filter="none";
+  ctx.drawImage(sim.oc,0,0,w,h);
+  // one subtle additive bloom for a gentle glow halo (does NOT wash out detail)
+  ctx.globalCompositeOperation="lighter";
+  ctx.globalAlpha=0.28;ctx.filter="blur("+Math.max(4,w*0.013)+"px)";
+  ctx.drawImage(sim.oc,0,0,w,h);
+  ctx.filter="none";ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";
 }
 
 /* ---------- readouts ---------- */
@@ -554,20 +571,25 @@ el("b-auto").addEventListener("click",()=>{auto=!auto;const b=el("b-auto");b.tex
 el("spd").addEventListener("input",e=>{speed=+e.target.value;el("spd-val").textContent=speed+"×";});
 el("mut").addEventListener("input",e=>{mutK=+e.target.value/100;el("mut-val").textContent=mutK.toFixed(1)+"×";});
 
-/* ---------- auto-evolve selection ---------- */
+/* ---------- auto-evolve: automatically SELECT the fittest specimen as the next parent ---------- */
+let autoPicking=false;
 function autoEvaluate(){
-  // pick best by accumulated fitness
-  let best=cands[0],bestScore=-1e9;
-  for(const c of cands){
-    const s=c.sim.stats();
-    // healthy biomass band + drift; punish death & explosion
-    const alive = s.frac>0.005 && s.frac<0.30 ? 1 : 0;
-    const bandPenalty = s.frac>0.30 ? (s.frac-0.30)*8 : 0;
-    const score = alive*(c.drift*1.6 + Math.min(s.mass,900)*0.004) - bandPenalty - (s.frac<0.004?5:0);
-    c.score=score;
+  // score the mutant candidates (skip the elite clone so the lineage always visibly changes)
+  let best=null,bestScore=-1e9;
+  for(let i=1;i<cands.length;i++){
+    const c=cands[i], s=c.sim.stats();
+    const alive=(s.frac>0.004 && s.frac<0.55)?1:0;
+    const score=alive*(c.drift*1.6 + Math.min(s.mass,600)*0.003) - (s.frac<0.004?10:0);
+    c._score=score;
     if(score>bestScore){bestScore=score;best=c;}
   }
-  promote(best.sim.g,true);
+  if(!best) best=cands[1]||cands[0];
+  // make the selection VISIBLE: flash the chosen slide, then promote it a beat later
+  best.el.classList.add("picked");
+  const bd=best.el.querySelector(".badge"); if(bd) bd.textContent="◆ SELECTED";
+  const g=best.genome;
+  autoPicking=true;
+  setTimeout(()=>{ autoPicking=false; promote(g,true); }, 750);
 }
 
 /* ---------- main loop ---------- */
@@ -589,10 +611,9 @@ function loop(now){
         c._st=st;
       }
     }
-    if(auto){genTimer++; if(genTimer>=AUTO_PERIOD) autoEvaluate();}
   }
   // render
-  main.render(); blit(sctx,main);
+  main.render(); blitGlow(sctx,main);
   for(const c of cands){
     c.sim.render(); fit(c.canvas); blit(c.ctx,c.sim);
   }
@@ -600,14 +621,29 @@ function loop(now){
   const st=main.stats();
   // watchdog: if the field dies during the ignition window, reseed (bounded attempts)
   if(playing){ guardFrames++;
-    if(st.mass<2 && guardFrames>25 && guardFrames<520 && reseedGuard<4){
+    if(st.mass<2 && guardFrames>25 && guardFrames<520 && reseedGuard<5){
       main.seed(); reseedGuard++; guardFrames=0;
     }
+  }
+  // population homeostat — hold the colony in a lively-but-sparse band [FLOOR, CAP]:
+  //  • over the cap  -> trim the overshoot (never a dense mat, never a wipe)
+  //  • under the floor-> seed fresh life so it never dwindles to a lonely speck
+  if(playing && guardFrames>15){
+    if(st.mass>MASS_CAP){ const f=Math.max(0.5,MASS_CAP/st.mass); const A=main.A; for(let i=0;i<A.length;i++) A[i]*=f; }
+    else if(st.mass<MASS_FLOOR && (guardFrames&7)===0){
+      main.addBlob(main.W*(0.2+0.6*Math.random()), main.H*(0.2+0.6*Math.random()), main.g.R*0.95, 0.85);
+    }
+  }
+  // auto-evolve: every AUTO_PERIOD frames, automatically select the fittest tray specimen as parent
+  if(auto && playing && !autoPicking && guardFrames>60){
+    genTimer++;
+    if(genTimer>=AUTO_PERIOD) autoEvaluate();
   }
   el("r-mass").textContent=Math.round(st.mass);
   let ddx=st.cx-lastMain.cx,ddy=st.cy-lastMain.cy;
   if(Math.abs(ddx)>MAINW/2||Math.abs(ddy)>MAINH/2){ddx=0;ddy=0;}
-  el("r-drift").innerHTML=(Math.sqrt(ddx*ddx+ddy*ddy)).toFixed(2)+' <small>px/f</small>';
+  const driftMag=Math.sqrt(ddx*ddx+ddy*ddy);
+  el("r-drift").innerHTML=driftMag.toFixed(2)+' <small>px/f</small>';
   lastMain=st;
   const dead=st.frac<0.004;
   el("livetag").textContent=dead?"○ DORMANT":"● LIVE";
@@ -625,6 +661,7 @@ function loop(now){
 
 // boot
 syncReadout();
+{ const b=el("b-auto"); b.textContent="⧗ Auto-evolve : ON"; b.classList.add("on"); }
 rebuildTray(main.g);
 try{window.__main=main;window.__seed=()=>main.seed();}catch(e){}
 requestAnimationFrame(loop);
